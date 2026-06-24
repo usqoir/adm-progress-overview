@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADM — Mill Plot Traceability Progress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root{
+  --bg:#0A1512; --bg2:#0C1A16; --panel:#11231E; --panel2:#16302A;
+  --line:rgba(180,205,192,.13); --line2:rgba(180,205,192,.07);
+  --ink:#ECE9DD; --muted:#92A89E; --faint:#62756C;
+  --gold:#F0C24A; --gold-d:#B98A2A;
+  --green:#4FBE8E; --orange:#E58E3B; --slate:#6E7C76;
+  --teal:#5BA9D6;
+  --vil:#4FBE8E; --vb10:#86D6AE; --b10:#E9C45A; --b20:#D98248; --ns:#566860;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+body{font-size:16px;line-height:1.5}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif;font-weight:600;line-height:1.08;margin:0}
+.mono{font-family:'IBM Plex Mono',monospace}
+::selection{background:var(--gold);color:#0A1512}
+
+/* ---------- layout shell ---------- */
+#deck{position:fixed;inset:0;overflow:hidden}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;
+  padding:54px 60px 60px 132px;opacity:0;visibility:hidden;
+  transform:translateY(18px);transition:opacity .5s ease,transform .5s ease;
+  overflow-y:auto;overflow-x:hidden}
+.slide.active{opacity:1;visibility:visible;transform:none}
+.slide::-webkit-scrollbar{width:8px}
+.slide::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+
+/* topographic motif on dark sections */
+.slide::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(900px 520px at 88% -8%, rgba(240,194,74,.06), transparent 60%),
+    radial-gradient(760px 600px at -6% 108%, rgba(79,190,142,.05), transparent 60%);}
+.slide > *{position:relative;z-index:1}
+
+/* ---------- nav rail ---------- */
+#rail{position:fixed;top:0;left:0;bottom:0;width:72px;z-index:40;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:18px 0;background:linear-gradient(180deg,var(--bg2),var(--bg));
+  border-right:1px solid var(--line)}
+#rail .brand{font-family:'Space Grotesk';font-weight:700;font-size:13px;letter-spacing:.5px;
+  writing-mode:vertical-rl;transform:rotate(180deg);color:var(--gold);margin-bottom:14px;white-space:nowrap}
+.nav-dot{position:relative;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--faint);font-family:'IBM Plex Mono';font-size:12px;font-weight:600;
+  transition:.25s;border:1px solid transparent}
+.nav-dot:hover{color:var(--ink);background:var(--panel)}
+.nav-dot.on{color:var(--gold);border-color:var(--line);background:var(--panel)}
+.nav-dot .tip{position:absolute;left:48px;white-space:nowrap;background:var(--panel2);
+  border:1px solid var(--line);padding:5px 10px;border-radius:8px;font-family:'IBM Plex Sans';
+  font-size:12px;color:var(--ink);opacity:0;pointer-events:none;transform:translateX(-6px);transition:.2s;text-transform:none}
+.nav-dot:hover .tip{opacity:1;transform:none}
+
+/* progress + counter */
+#prog{position:fixed;top:0;left:72px;right:0;height:3px;background:transparent;z-index:50}
+#prog>i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--gold));width:0;transition:width .5s}
+#counter{position:fixed;right:22px;bottom:18px;z-index:50;font-family:'IBM Plex Mono';
+  font-size:12px;color:var(--muted);letter-spacing:1px}
+#counter b{color:var(--gold);font-weight:600}
+.hintkeys{position:fixed;left:88px;bottom:18px;z-index:50;font-family:'IBM Plex Mono';font-size:11px;color:var(--faint)}
+
+/* ---------- shared bits ---------- */
+.eyebrow{font-family:'IBM Plex Mono';font-size:12px;letter-spacing:2.5px;color:var(--gold-d);
+  text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:"";width:26px;height:1px;background:var(--gold-d)}
+.shead{font-size:clamp(26px,3vw,40px);letter-spacing:-.5px;margin-bottom:6px}
+.sub{color:var(--muted);max-width:760px;margin:10px 0 26px;font-size:15.5px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.grid{display:grid;gap:18px}
+.tag{font-family:'IBM Plex Mono';font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+.chart{width:100%}
+.fnote{font-family:'IBM Plex Mono';font-size:11px;color:var(--faint);margin-top:14px;line-height:1.6}
+
+/* ---------- cover ---------- */
+#s0{padding-left:132px;justify-content:center}
+.cover-grid{display:grid;grid-template-columns:1.25fr .9fr;gap:40px;align-items:center}
+.cover-coord{font-family:'IBM Plex Mono';font-size:12px;color:var(--faint);letter-spacing:1.5px;margin-bottom:24px}
+.cover h1{font-size:clamp(40px,6.4vw,86px);letter-spacing:-2px;line-height:.98}
+.cover h1 em{font-style:normal;color:var(--gold)}
+.cover .lead{color:var(--muted);font-size:18px;max-width:540px;margin:24px 0 30px}
+.cover-meta{display:flex;gap:30px;flex-wrap:wrap;font-family:'IBM Plex Mono';font-size:12.5px;color:var(--muted)}
+.cover-meta b{display:block;color:var(--ink);font-family:'Space Grotesk';font-size:21px;margin-top:3px;letter-spacing:.3px}
+.cover-art{aspect-ratio:1/1;border:1px solid var(--line);border-radius:18px;position:relative;overflow:hidden;background:radial-gradient(120% 120% at 80% 10%,rgba(240,194,74,.10),transparent 55%),var(--panel)}
+
+/* ---------- KPI ---------- */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px 20px 18px;position:relative;overflow:hidden}
+.kpi .accent{position:absolute;left:0;top:0;bottom:0;width:3px}
+.kpi .v{font-family:'Space Grotesk';font-weight:600;font-size:clamp(30px,3.4vw,46px);letter-spacing:-1px;line-height:1}
+.kpi .v small{font-size:.42em;color:var(--muted);font-weight:500;margin-left:4px}
+.kpi .l{color:var(--muted);font-size:13.5px;margin-top:9px}
+.kpi .bar{height:5px;border-radius:4px;background:var(--line);margin-top:13px;overflow:hidden}
+.kpi .bar>i{display:block;height:100%;border-radius:4px}
+.kpi .pct{font-family:'IBM Plex Mono';font-size:11px;color:var(--muted);margin-top:7px;letter-spacing:.5px}
+
+/* two-col content */
+.cols{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start;flex:1;min-height:0}
+.cols.wide{grid-template-columns:380px 1fr}
+.note-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.note-card h3{font-size:18px;margin-bottom:10px}
+.note-card p{color:var(--muted);font-size:14px;margin:0 0 12px}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px dashed var(--line2)}
+.stat-row:last-child{border:0}
+.stat-row .k{color:var(--muted);font-size:13.5px}
+.stat-row .n{font-family:'IBM Plex Mono';font-weight:600;font-size:17px}
+
+/* sankey controls */
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{background:transparent;border:0;color:var(--muted);font-family:'IBM Plex Mono';font-size:12px;
+  padding:7px 14px;border-radius:7px;cursor:pointer;letter-spacing:.5px;transition:.2s}
+.seg button.on{background:var(--panel2);color:var(--gold)}
+
+/* table */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:right;padding:11px 12px;border-bottom:1px solid var(--line2)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:1px;color:var(--muted);
+  text-transform:uppercase;font-weight:500;border-bottom:1px solid var(--line)}
+tbody td.mono{font-family:'IBM Plex Mono'}
+tbody tr:hover{background:rgba(240,194,74,.04)}
+tfoot td{font-family:'IBM Plex Mono';font-weight:600;border-top:1px solid var(--line);color:var(--gold)}
+.cell-bar{display:inline-block;height:6px;border-radius:3px;vertical-align:middle;margin-left:8px}
+
+/* ---------- timeline / gantt ---------- */
+.tl-wrap{display:grid;grid-template-columns:300px 1fr;gap:24px;flex:1;min-height:0}
+.controls .ctrl{margin-bottom:18px}
+.controls label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px}
+.controls label b{font-family:'IBM Plex Mono';color:var(--gold);font-weight:600}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;background:var(--line);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--gold);cursor:pointer;border:2px solid var(--bg)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;border:2px solid var(--bg)}
+.dur-row{display:grid;grid-template-columns:1fr 56px;gap:8px;align-items:center;margin-bottom:9px}
+.dur-row span{font-size:13px;color:var(--muted)}
+.dur-row input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);
+  border-radius:7px;padding:6px 8px;font-family:'IBM Plex Mono';text-align:center}
+.verdict{margin-top:6px;padding:16px;border-radius:12px;border:1px solid var(--line)}
+.verdict.ok{background:rgba(79,190,142,.10);border-color:rgba(79,190,142,.4)}
+.verdict.late{background:rgba(229,142,59,.10);border-color:rgba(229,142,59,.45)}
+.verdict .vt{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.verdict .vd{font-family:'Space Grotesk';font-size:24px;font-weight:600;margin:5px 0 3px}
+.verdict .vs{font-size:13px;color:var(--muted)}
+
+.gantt{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;overflow:auto;min-height:0}
+.gantt-inner{min-width:720px;position:relative}
+.g-axis{position:relative;height:22px;margin-left:104px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.g-tick{position:absolute;top:0;font-family:'IBM Plex Mono';font-size:10px;color:var(--faint);transform:translateX(-50%)}
+.g-tick::after{content:"";position:absolute;left:50%;top:16px;width:1px;height:7px;background:var(--line)}
+.g-row{display:flex;align-items:center;height:30px}
+.g-label{width:104px;flex:0 0 104px;font-family:'IBM Plex Mono';font-size:11.5px;color:var(--muted);padding-right:10px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-track{position:relative;flex:1;height:30px}
+.g-seg{position:absolute;top:6px;height:18px;border-radius:5px;display:flex;align-items:center;padding:0 6px;
+  font-family:'IBM Plex Mono';font-size:9.5px;color:#0A1512;overflow:hidden;white-space:nowrap;cursor:default}
+.g-seg.dig{background:repeating-linear-gradient(45deg,rgba(146,168,158,.22),rgba(146,168,158,.22) 5px,rgba(146,168,158,.07) 5px,rgba(146,168,158,.07) 10px);
+  border:1px solid var(--line);color:var(--muted);top:9px;height:12px}
+.g-band{position:absolute;top:0;bottom:0;background:rgba(240,194,74,.10);border-left:1px dashed var(--gold-d);border-right:1px dashed var(--gold-d);z-index:0}
+.g-band .bl{position:absolute;top:-2px;left:6px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold-d);white-space:nowrap}
+.g-today{position:absolute;top:-2px;bottom:0;width:1px;background:var(--teal);z-index:2}
+.g-today::after{content:"now";position:absolute;top:-2px;left:3px;font-family:'IBM Plex Mono';font-size:9px;color:var(--teal)}
+.g-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+
+/* closing */
+.close-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.ring-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:center}
+.ring-card .rl{color:var(--muted);font-size:13.5px;margin-top:8px}
+.ring-card .rs{font-family:'IBM Plex Mono';font-size:11px;color:var(--faint);margin-top:3px}
+.next-list{list-style:none;padding:0;margin:14px 0 0}
+.next-list li{padding:13px 0;border-bottom:1px dashed var(--line2);display:flex;gap:14px;align-items:flex-start;font-size:14px;color:var(--muted)}
+.next-list li b{color:var(--ink);font-weight:600}
+.next-list .num{font-family:'IBM Plex Mono';color:var(--gold);flex:0 0 auto}
+
+/* responsive */
+@media (max-width:960px){
+  .slide{padding:46px 18px 70px 18px}
+  #rail{flex-direction:row;width:auto;right:0;bottom:auto;height:48px;padding:0 10px;justify-content:flex-start;gap:2px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+  #rail .brand{writing-mode:horizontal-tb;transform:none;margin:0 8px 0 0;font-size:12px}
+  .nav-dot{width:30px;height:34px;flex:0 0 auto}
+  .nav-dot .tip{display:none}
+  #prog{left:0;top:48px}
+  .slide{padding-top:62px}
+  #s0{padding-left:18px}
+  .cover-grid{grid-template-columns:1fr}.cover-art{display:none}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .cols,.cols.wide,.tl-wrap{grid-template-columns:1fr}
+  .close-grid{grid-template-columns:1fr}
+  .hintkeys{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav id="rail">
+  <div class="brand">ADM · TRACT</div>
+</nav>
+<div id="prog"><i></i></div>
+<div id="counter"><b id="cnow">00</b> / <span id="ctot">09</span></div>
+<div class="hintkeys">← → atau scroll untuk navigasi</div>
+
+<div id="deck">
+
+<!-- 0 COVER -->
+<section class="slide cover" id="s0">
+  <div class="cover-grid">
+    <div>
+      <div class="cover-coord">PROGRESS REPORT · 24 JUN 2026 · INDONESIA OIL PALM SUPPLY BASE</div>
+      <h1>Plot Traceability<br><em>Progress</em> untuk ADM</h1>
+      <p class="lead">Status pemetaan plot tingkat mill, capaian traceability, dan rencana penyelesaian hingga upload ke TRACT — di seluruh supply chain ADM.</p>
+      <div class="cover-meta">
+        <div>SUPPLY CHAIN<b>11</b></div>
+        <div>MILL AKTIF<b>644</b></div>
+        <div>PLOT TERSEDIA<b>403</b></div>
+        <div>TARGET SELESAI<b>7–14 Agu</b></div>
+      </div>
+    </div>
+    <div class="cover-art"><canvas id="coverCanvas"></canvas></div>
+  </div>
+</section>
+
+<!-- 1 EXEC SUMMARY -->
+<section class="slide" id="s1">
+  <div class="eyebrow">01 — Ringkasan</div>
+  <h2 class="shead">Posisi keseluruhan</h2>
+  <p class="sub">Lintas 11 supply chain dan 644 mill aktif (di luar 23 mill yang sudah <em>retired</em>). Persentase capaian dihitung terhadap basis mill aktif.</p>
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:18px;margin-top:18px">
+    <div class="panel">
+      <div class="tag">Komposisi status plot</div>
+      <div id="miniPlot" class="chart" style="height:150px"></div>
+    </div>
+    <div class="panel">
+      <div class="tag">Capaian traceability level</div>
+      <div id="miniTrace" class="chart" style="height:150px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 PORTFOLIO -->
+<section class="slide" id="s2">
+  <div class="eyebrow">02 — Portofolio</div>
+  <h2 class="shead">Sebelas supply chain</h2>
+  <p class="sub">Jumlah mill per supply chain (Project). SJIM dan Permata mendominasi volume; bersama-sama keduanya mencakup hampir separuh seluruh mill.</p>
+  <div class="cols wide">
+    <div class="note-card">
+      <h3>Distribusi beban kerja</h3>
+      <p>Volume mill sangat timpang antar supply chain — penting untuk perencanaan paralelisasi.</p>
+      <div class="stat-row"><span class="k">Supply chain</span><span class="n">11</span></div>
+      <div class="stat-row"><span class="k">Total mill aktif</span><span class="n">644</span></div>
+      <div class="stat-row"><span class="k">Terbesar — SJIM</span><span class="n">208</span></div>
+      <div class="stat-row"><span class="k">Terkecil — NAM & LTS</span><span class="n">4</span></div>
+      <div class="stat-row"><span class="k">Rata-rata / SC</span><span class="n">59</span></div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="tag">Mill per supply chain</div>
+      <div id="cPortfolio" class="chart" style="flex:1;min-height:330px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 PLOT STATUS -->
+<section class="slide" id="s3">
+  <div class="eyebrow">03 — Status Plot</div>
+  <h2 class="shead">Plot tersedia vs masih berproses</h2>
+  <p class="sub">Per supply chain: berapa mill yang data plotnya sudah <em>Available</em>, masih <em>On Progress</em> (digitizing), dan yang sudah <em>Retired</em>.</p>
+  <div class="cols wide">
+    <div class="note-card">
+      <h3>62,6% plot sudah tersedia</h3>
+      <p>403 dari 644 mill sudah punya data plot. 218 mill masih dalam proses digitizing — terkonsentrasi di SJIM (123) dan Permata (74).</p>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--green)"></span> Available</span><span class="n">403</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--orange)"></span> On Progress</span><span class="n">218</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--slate)"></span> Retired</span><span class="n">23</span></div>
+      <p style="margin-top:14px;font-size:13px">4 supply chain sudah 100% available: <b style="color:var(--ink)">FGV, SUNRISE, HOK HUAT, NAM&nbsp;&amp;&nbsp;LTS</b>.</p>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="tag">Status plot per supply chain</div>
+      <div id="cPlot" class="chart" style="flex:1;min-height:340px"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--green)"></span>Available</span>
+        <span><span class="sw" style="background:var(--orange)"></span>On Progress</span>
+        <span><span class="sw" style="background:var(--slate)"></span>Retired</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 TRACEABILITY -->
+<section class="slide" id="s4">
+  <div class="eyebrow">04 — Traceability Level</div>
+  <h2 class="shead">Sejauh apa tertelusur</h2>
+  <p class="sub">Saat traceability sudah mencapai <em>Village Level</em>, pendekatan buffer tidak lagi diperlukan. Mayoritas masih memakai buffer 20&nbsp;km sebagai pendekatan awal.</p>
+  <div class="cols wide">
+    <div class="note-card">
+      <h3>155 mill sudah Village Level</h3>
+      <p>147 murni Village Level + 8 kombinasi Village + Buffer 10&nbsp;km. Buffer 20&nbsp;km (406 mill) adalah pendekatan dominan yang akan menyusut seiring penelusuran diperdalam.</p>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--vil)"></span> Village Level</span><span class="n">147</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--vb10)"></span> Village + Buffer 10km</span><span class="n">8</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--b10)"></span> Buffer 10km</span><span class="n">26</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--b20)"></span> Buffer 20km</span><span class="n">406</span></div>
+      <div class="stat-row"><span class="k"><span class="sw" style="background:var(--ns)"></span> Belum ditetapkan</span><span class="n">57</span></div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="tag">Traceability level per supply chain</div>
+      <div id="cTrace" class="chart" style="flex:1;min-height:340px"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--vil)"></span>Village</span>
+        <span><span class="sw" style="background:var(--vb10)"></span>Village+B10</span>
+        <span><span class="sw" style="background:var(--b10)"></span>Buffer 10km</span>
+        <span><span class="sw" style="background:var(--b20)"></span>Buffer 20km</span>
+        <span><span class="sw" style="background:var(--ns)"></span>Belum</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 SANKEY -->
+<section class="slide" id="s5">
+  <div class="eyebrow">05 — Aliran Data</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px">
+    <div>
+      <h2 class="shead">Dari supply chain ke capaian</h2>
+      <p class="sub" style="margin-bottom:0">Telusuri bagaimana setiap supply chain mengalir ke status plot lalu ke level traceability. Arahkan kursor ke simpul/aliran untuk detail.</p>
+    </div>
+    <div class="seg" id="sankeyToggle">
+      <button data-m="full" class="on">Project → Status → Trace</button>
+      <button data-m="trace">Project → Trace</button>
+    </div>
+  </div>
+  <div class="panel" style="flex:1;display:flex;flex-direction:column;margin-top:18px;min-height:0">
+    <div id="cSankey" class="chart" style="flex:1;min-height:420px"></div>
+  </div>
+</section>
+
+<!-- 6 UPLOAD TRACT -->
+<section class="slide" id="s6">
+  <div class="eyebrow">06 — Upload ke TRACT</div>
+  <h2 class="shead">Progres unggah ke TRACT</h2>
+  <p class="sub">Dua artefak diunggah per mill: <em>Master Data</em> lalu <em>Geojson</em>. Master data jauh lebih maju; geojson menyusul karena bergantung pada plot yang sudah final.</p>
+  <div class="cols wide">
+    <div class="note-card">
+      <div style="display:flex;gap:18px;margin-bottom:6px">
+        <div style="flex:1;text-align:center"><div id="gaugeMD" style="height:118px"></div><div class="tag" style="margin-top:-6px">Master Data</div></div>
+        <div style="flex:1;text-align:center"><div id="gaugeGJ" style="height:118px"></div><div class="tag" style="margin-top:-6px">Geojson</div></div>
+      </div>
+      <div class="stat-row"><span class="k">Master data terunggah</span><span class="n">354</span></div>
+      <div class="stat-row"><span class="k">Geojson terunggah</span><span class="n">125</span></div>
+      <div class="stat-row"><span class="k">PERMATA master data</span><span class="n">98 / 104</span></div>
+      <p style="margin-top:12px;font-size:13px">Upload berjalan inkremental tiap Jumat untuk mill yang datanya sudah siap.</p>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="tag">Terunggah per supply chain (Master vs Geojson)</div>
+      <div id="cTract" class="chart" style="flex:1;min-height:340px"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--green)"></span>Master data — YES</span>
+        <span><span class="sw" style="background:var(--teal)"></span>Geojson — YES</span>
+        <span><span class="sw" style="background:var(--slate)"></span>Total mill</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 MILL LIST 2024 vs 2025 -->
+<section class="slide" id="s7">
+  <div class="eyebrow">07 — Mill List 2024 vs 2025</div>
+  <h2 class="shead">Perubahan daftar mill</h2>
+  <p class="sub">Pembaruan daftar mill per supplier dari 2024 ke 2025. Cakupan melonjak tajam — total 329 mill di 2025 dari sebelumnya 140, dengan plot tersedia untuk 132 di antaranya.</p>
+  <div class="cols wide">
+    <div class="panel" style="display:flex;flex-direction:column">
+      <div class="tag">Jumlah mill 2024 vs 2025</div>
+      <div id="cMill" class="chart" style="flex:1;min-height:300px"></div>
+    </div>
+    <div class="panel">
+      <div class="tag" style="margin-bottom:10px">Rincian per supplier</div>
+      <table>
+        <thead><tr><th>Supplier</th><th>2024</th><th>2025</th><th>Plot ada</th><th>Belum</th></tr></thead>
+        <tbody id="millBody"></tbody>
+        <tfoot><tr><td>Total</td><td class="mono">140</td><td class="mono">329</td><td class="mono">132</td><td class="mono">197</td></tr></tfoot>
+      </table>
+      <div class="fnote">"Plot ada" = data plot 2025 sudah tersedia (Y). Catatan: pada NAM seluruh 4 mill 2025 sudah tersedia.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 TIMELINE -->
+<section class="slide" id="s8">
+  <div class="eyebrow">08 — Timeline & Simulasi</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 class="shead">Rencana penyelesaian</h2>
+      <p class="sub" style="margin-bottom:0">Pipeline per supply chain: digitizing → analysis + filtering (1h) → report (2h) → upload TRACT (1h), dijalankan paralel. Setel parameter untuk menguji apakah target 7–14 Agustus tercapai.</p>
+    </div>
+  </div>
+  <div class="tl-wrap" style="margin-top:18px">
+    <div class="controls panel">
+      <div class="tag" style="margin-bottom:16px">Parameter simulasi</div>
+      <div class="ctrl">
+        <label>Tim paralel (stream) <b id="vStreams">3</b></label>
+        <input type="range" id="iStreams" min="1" max="6" value="3" step="1">
+      </div>
+      <div class="ctrl">
+        <label>Digitizing tuntas paling lambat <b id="vAll">17 Jul</b></label>
+        <input type="range" id="iAll" min="3" max="30" value="13" step="1">
+      </div>
+      <div class="ctrl">
+        <div class="tag" style="margin-bottom:8px">Durasi tahap (hari kerja)</div>
+        <div class="dur-row"><span>Analysis + Filtering</span><input id="iAF" type="number" value="1" min="1" max="5"></div>
+        <div class="dur-row"><span>Report</span><input id="iRep" type="number" value="2" min="1" max="6"></div>
+        <div class="dur-row"><span>Upload TRACT</span><input id="iUp" type="number" value="1" min="1" max="4"></div>
+      </div>
+      <div class="verdict" id="verdict">
+        <div class="vt">Proyeksi selesai</div>
+        <div class="vd" id="vdDate">—</div>
+        <div class="vs" id="vdSlack">—</div>
+      </div>
+    </div>
+    <div class="gantt"><div class="gantt-inner" id="ganttInner"></div>
+      <div class="g-legend">
+        <span><span class="sw" style="background:repeating-linear-gradient(45deg,rgba(146,168,158,.5),rgba(146,168,158,.5) 3px,transparent 3px,transparent 6px)"></span>Digitizing</span>
+        <span><span class="sw" style="background:var(--green)"></span>Analysis+Filter</span>
+        <span><span class="sw" style="background:var(--gold)"></span>Report</span>
+        <span><span class="sw" style="background:var(--teal)"></span>Upload TRACT</span>
+        <span><span class="sw" style="background:rgba(240,194,74,.4)"></span>Target 7–14 Agu</span>
+      </div>
+    </div>
+  </div>
+  <div class="fnote">Asumsi default: mulai Sen 30 Jun · supply chain yang plotnya sudah 100% available dianggap siap diproses sejak awal · supply chain dengan mill On&nbsp;Progress menyelesaikan digitizing bertahap hingga tanggal yang disetel · penjadwalan memakai hari kerja (Sen–Jum). Semua angka di atas dapat disetel.</div>
+</section>
+
+<!-- 9 CLOSING -->
+<section class="slide" id="s9">
+  <div class="eyebrow">09 — Rekap</div>
+  <h2 class="shead">Ringkasan capaian</h2>
+  <p class="sub">Persentase dihitung terhadap 621 mill aktif (di luar retired).</p>
+  <div class="close-grid">
+    <div class="ring-card"><div id="rPlot" style="height:150px"></div><div class="rl">Plot tersedia</div><div class="rs">403 / 621 mill</div></div>
+    <div class="ring-card"><div id="rMaster" style="height:150px"></div><div class="rl">Master data ke TRACT</div><div class="rs">354 / 621 mill</div></div>
+    <div class="ring-card"><div id="rGeo" style="height:150px"></div><div class="rl">Geojson ke TRACT</div><div class="rs">125 / 621 mill</div></div>
+  </div>
+  <div class="panel" style="margin-top:18px">
+    <div class="tag" style="margin-bottom:6px">Fokus berikutnya menuju target Agustus</div>
+    <ul class="next-list">
+      <li><span class="num">01</span><span><b>Tuntaskan digitizing 218 mill On Progress</b> — terpusat di SJIM (123) & Permata (74); ini bottleneck utama pipeline.</span></li>
+      <li><span class="num">02</span><span><b>Percepat geojson upload</b> — baru 125 dari 354 master data yang sudah punya geojson; selisih 229 mill jadi prioritas.</span></li>
+      <li><span class="num">03</span><span><b>Perdalam traceability</b> — 406 mill masih buffer 20km; tingkatkan ke village level di mana memungkinkan.</span></li>
+      <li><span class="num">04</span><span><b>Jalankan upload inkremental tiap Jumat</b> mulai 26 Jun untuk mill yang sudah siap, agar beban akhir tidak menumpuk.</span></li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+/* ===================== DATA ===================== */
+const SC=[
+ {p:'SJIM',t:208,av:75,pr:123,re:10,vil:23,b10:0,b20:143,vb10:4,ns:38},
+ {p:'Permata',t:104,av:29,pr:74,re:1,vil:62,b10:0,b20:37,vb10:1,ns:4},
+ {p:'JINLEE',t:80,av:74,pr:6,re:0,vil:0,b10:0,b20:80,vb10:0,ns:0},
+ {p:'FGV',t:54,av:54,pr:0,re:0,vil:0,b10:0,b20:54,vb10:0,ns:0},
+ {p:'DOMAS',t:41,av:33,pr:5,re:3,vil:20,b10:0,b20:12,vb10:0,ns:9},
+ {p:'SUNRISE',t:40,av:40,pr:0,re:0,vil:1,b10:26,b20:13,vb10:0,ns:0},
+ {p:'HOK HUAT',t:34,av:34,pr:0,re:0,vil:0,b10:0,b20:34,vb10:0,ns:0},
+ {p:'BNS',t:33,av:24,pr:0,re:9,vil:21,b10:0,b20:3,vb10:3,ns:6},
+ {p:'YORGO',t:25,av:16,pr:9,re:0,vil:16,b10:0,b20:9,vb10:0,ns:0},
+ {p:'SEHCOM',t:21,av:20,pr:1,re:0,vil:0,b10:0,b20:21,vb10:0,ns:0},
+ {p:'NAM & LTS',t:4,av:4,pr:0,re:0,vil:4,b10:0,b20:0,vb10:0,ns:0},
+];
+const TRACT=[
+ {p:'SJIM',t:208,md:68,gj:68},{p:'PERMATA',t:104,md:98,gj:29},{p:'JINLEE',t:80,md:0,gj:0},
+ {p:'FGV',t:54,md:54,gj:0},{p:'DOMAS',t:41,md:28,gj:0},{p:'SUNRISE',t:40,md:40,gj:28},
+ {p:'HOK HUAT',t:34,md:33,gj:0},{p:'BNS',t:33,md:18,gj:0},{p:'YORGO',t:25,md:15,gj:0},
+ {p:'SEHCOM',t:21,md:0,gj:0},{p:'NAM & LTS',t:4,md:0,gj:0},
+];
+const MILL=[
+ {s:'SJIM',y24:82,y25:199,yes:76,no:123},
+ {s:'Permata',y24:30,y25:103,yes:29,no:74},
+ {s:'BNS',y24:28,y25:23,yes:23,no:0},
+ {s:'NAM',y24:0,y25:4,yes:4,no:0},
+];
+const PS_TRACE=[
+ ['AVAILABLE','Village Level',97],['AVAILABLE','Village+B10',1],['AVAILABLE','Buffer 10km',26],['AVAILABLE','Buffer 20km',267],['AVAILABLE','Belum',12],
+ ['ON PROGRESS','Village Level',48],['ON PROGRESS','Buffer 20km',139],['ON PROGRESS','Belum',31],
+ ['RETIRED','Village Level',2],['RETIRED','Village+B10',7],['RETIRED','Belum',14],
+];
+const C={ink:'#ECE9DD',muted:'#92A89E',faint:'#62756C',gold:'#F0C24A',green:'#4FBE8E',
+ orange:'#E58E3B',slate:'#6E7C76',teal:'#5BA9D6',vil:'#4FBE8E',vb10:'#86D6AE',b10:'#E9C45A',
+ b20:'#D98248',ns:'#566860',line:'rgba(180,205,192,.13)',panel:'#11231E'};
+const baseTip={backgroundColor:'#16302A',borderColor:C.line,borderWidth:1,
+ textStyle:{color:C.ink,fontFamily:'IBM Plex Sans',fontSize:13},extraCssText:'border-radius:10px;'};
+
+/* ===================== NAV ===================== */
+const slides=[...document.querySelectorAll('.slide')];
+const labels=['Cover','Ringkasan','Portofolio','Status Plot','Traceability','Aliran Data','Upload TRACT','Mill 24/25','Timeline','Rekap'];
+const rail=document.getElementById('rail');
+slides.forEach((s,i)=>{
+  const d=document.createElement('div');d.className='nav-dot';d.dataset.i=i;
+  d.innerHTML=String(i).padStart(2,'0')+'<span class="tip">'+labels[i]+'</span>';
+  d.onclick=()=>go(i);rail.appendChild(d);
+});
+const dots=[...document.querySelectorAll('.nav-dot')];
+document.getElementById('ctot').textContent=String(slides.length-1).padStart(2,'0');
+let cur=0,built={};
+function go(i){
+  i=Math.max(0,Math.min(slides.length-1,i));
+  slides[cur].classList.remove('active');dots[cur].classList.remove('on');
+  cur=i;slides[cur].classList.add('active');dots[cur].classList.add('on');
+  document.querySelector('#prog>i').style.width=(i/(slides.length-1)*100)+'%';
+  document.getElementById('cnow').textContent=String(i).padStart(2,'0');
+  if(!built[i]){build(i);built[i]=true;}
+  setTimeout(()=>resizeIn(i),60);
+}
+function resizeIn(i){charts.filter(c=>slides[i].contains(c.getDom())).forEach(c=>c.resize());}
+window.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='PageDown'){go(cur+1)}
+  if(e.key==='ArrowLeft'||e.key==='PageUp'){go(cur-1)}
+  if(e.key==='Home')go(0);if(e.key==='End')go(slides.length-1);
+});
+let wl=0;window.addEventListener('wheel',e=>{
+  if(Math.abs(e.deltaY)<24)return;const t=slides[cur];
+  const scrollable=t.scrollHeight>t.clientHeight+4;
+  if(scrollable){const atTop=t.scrollTop<=2,atBot=t.scrollTop+t.clientHeight>=t.scrollHeight-2;
+    if((e.deltaY>0&&!atBot)||(e.deltaY<0&&!atTop))return;}
+  const now=Date.now();if(now-wl<700)return;wl=now;go(cur+(e.deltaY>0?1:-1));
+},{passive:true});
+let tsx=0,tsy=0;
+window.addEventListener('touchstart',e=>{tsx=e.touches[0].clientX;tsy=e.touches[0].clientY},{passive:true});
+window.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tsx,dy=e.changedTouches[0].clientY-tsy;
+  if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.4)go(cur+(dx<0?1:-1));
+},{passive:true});
+window.addEventListener('resize',()=>resizeIn(cur));
+
+/* ===================== CHART REGISTRY ===================== */
+const charts=[];
+function mk(id,opt){const el=document.getElementById(id);if(!el)return null;
+  const c=echarts.init(el,null,{renderer:'canvas'});c.setOption(opt);charts.push(c);return c;}
+const axisCommon={axisLine:{lineStyle:{color:C.line}},axisLabel:{color:C.muted,fontFamily:'IBM Plex Mono',fontSize:11},
+  axisTick:{show:false},splitLine:{lineStyle:{color:'rgba(180,205,192,.06)'}}};
+
+/* ===================== BUILDERS ===================== */
+function build(i){({1:b1,2:b2,3:b3,4:b4,5:b5,6:b6,7:b7,8:b8,9:b9}[i]||(()=>{}))();}
+
+/* --- 1 KPI --- */
+function b1(){
+  const k=[
+    {v:'644',l:'Mill aktif (di luar 23 retired)',a:C.gold,p:100,c:C.gold,pct:'11 supply chain'},
+    {v:'403',l:'Plot tersedia (Available)',a:C.green,p:64.9,c:C.green,pct:'64,9% dari mill aktif'},
+    {v:'155',l:'Mill capai Village Level',a:C.vb10,p:24.96,c:C.vb10,pct:'24,9% · buffer tak diperlukan'},
+    {v:'354',l:'Master data ke TRACT',a:C.teal,p:57.0,c:C.teal,pct:'57,0% terunggah'},
+  ];
+  document.getElementById('kpiGrid').innerHTML=k.map(x=>`
+    <div class="kpi"><div class="accent" style="background:${x.a}"></div>
+      <div class="v">${x.v}</div><div class="l">${x.l}</div>
+      <div class="bar"><i style="width:${x.p}%;background:${x.c}"></i></div>
+      <div class="pct">${x.pct}</div></div>`).join('');
+  mk('miniPlot',donut([
+    {value:403,name:'Available',itemStyle:{color:C.green}},
+    {value:218,name:'On Progress',itemStyle:{color:C.orange}},
+    {value:23,name:'Retired',itemStyle:{color:C.slate}}],'644','mill'));
+  mk('miniTrace',donut([
+    {value:147,name:'Village',itemStyle:{color:C.vil}},
+    {value:8,name:'Village+B10',itemStyle:{color:C.vb10}},
+    {value:26,name:'Buffer 10km',itemStyle:{color:C.b10}},
+    {value:406,name:'Buffer 20km',itemStyle:{color:C.b20}},
+    {value:57,name:'Belum',itemStyle:{color:C.ns}}],'155','village'));
+}
+function donut(data,center,sub){return{
+  tooltip:{...baseTip,trigger:'item',valueFormatter:v=>v+' mill'},
+  series:[{type:'pie',radius:['58%','85%'],center:['28%','50%'],avoidLabelOverlap:false,
+    label:{show:false},labelLine:{show:false},data,
+    itemStyle:{borderColor:C.panel,borderWidth:2}}],
+  graphic:[{type:'text',left:'24%',top:'40%',style:{text:center,fill:C.ink,fontFamily:'Space Grotesk',fontSize:26,fontWeight:600,textAlign:'center'}},
+    {type:'text',left:'center',top:'40%',style:{text:'',fontSize:1}}],
+  legend:{orient:'vertical',right:'2%',top:'center',itemWidth:10,itemHeight:10,itemGap:9,
+    textStyle:{color:C.muted,fontSize:12,fontFamily:'IBM Plex Sans'},
+    formatter:n=>{const d=data.find(x=>x.name===n);return n+'  '+d.value;}}
+};}
+
+/* --- 2 PORTFOLIO --- */
+function b2(){
+  const d=[...SC].sort((a,b)=>a.t-b.t);
+  mk('cPortfolio',{
+    grid:{left:90,right:48,top:10,bottom:18},
+    tooltip:{...baseTip,trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>v+' mill'},
+    xAxis:{type:'value',...axisCommon},
+    yAxis:{type:'category',data:d.map(x=>x.p),...axisCommon,axisLabel:{...axisCommon.axisLabel,fontSize:12}},
+    series:[{type:'bar',data:d.map(x=>x.t),barWidth:'58%',
+      itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:C.gold},{offset:1,color:'#C99A2E'}]),borderRadius:[0,5,5,0]},
+      label:{show:true,position:'right',color:C.muted,fontFamily:'IBM Plex Mono',fontSize:11}}]
+  });
+}
+
+/* --- 3 PLOT STATUS --- */
+function b3(){
+  const d=[...SC].sort((a,b)=>(a.av+a.pr+a.re)-(b.av+b.pr+b.re));
+  mk('cPlot',stacked(d,[
+    {n:'Available',k:'av',c:C.green},{n:'On Progress',k:'pr',c:C.orange},{n:'Retired',k:'re',c:C.slate}]));
+}
+/* --- 4 TRACE --- */
+function b4(){
+  const d=[...SC].sort((a,b)=>a.t-b.t);
+  mk('cTrace',stacked(d,[
+    {n:'Village',k:'vil',c:C.vil},{n:'Village+B10',k:'vb10',c:C.vb10},
+    {n:'Buffer 10km',k:'b10',c:C.b10},{n:'Buffer 20km',k:'b20',c:C.b20},
+    {n:'Belum',k:'ns',c:C.ns}]));
+}
+function stacked(d,series){return{
+  grid:{left:90,right:24,top:10,bottom:18},
+  tooltip:{...baseTip,trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>v+' mill'},
+  xAxis:{type:'value',...axisCommon},
+  yAxis:{type:'category',data:d.map(x=>x.p),...axisCommon,axisLabel:{...axisCommon.axisLabel,fontSize:11.5}},
+  series:series.map((s,idx)=>({name:s.n,type:'bar',stack:'a',data:d.map(x=>x[s.k]),
+    itemStyle:{color:s.c,borderRadius:idx===series.length-1?[0,4,4,0]:0},barWidth:'62%'}))
+};}
+
+/* --- 5 SANKEY --- */
+let sankeyChart;
+function b5(){sankeyChart=mk('cSankey',sankeyOpt('full'));}
+function sankeyOpt(mode){
+  const nodes=[],links=[];const seen=new Set();
+  const col=n=>({'AVAILABLE':C.green,'ON PROGRESS':C.orange,'RETIRED':C.slate,
+    'Village Level':C.vil,'Village+B10':C.vb10,'Buffer 10km':C.b10,'Buffer 20km':C.b20,'Belum':C.ns}[n]||C.gold);
+  const add=n=>{if(!seen.has(n)){seen.add(n);nodes.push({name:n,itemStyle:{color:col(n)}});}};
+  if(mode==='full'){
+    SC.forEach(s=>{add(s.p);
+      if(s.av)links.push({source:s.p,target:'AVAILABLE',value:s.av});
+      if(s.pr)links.push({source:s.p,target:'ON PROGRESS',value:s.pr});
+      if(s.re)links.push({source:s.p,target:'RETIRED',value:s.re});});
+    ['AVAILABLE','ON PROGRESS','RETIRED'].forEach(add);
+    PS_TRACE.forEach(([a,b,v])=>{add(b);links.push({source:a,target:b,value:v});});
+  }else{
+    const PT={SJIM:{'Belum':38,'Buffer 20km':143,'Village Level':23,'Village+B10':4},
+      Permata:{'Village Level':62,'Buffer 20km':37,'Belum':4,'Village+B10':1},
+      'NAM & LTS':{'Village Level':4},DOMAS:{'Buffer 20km':12,'Village Level':20,'Belum':9},
+      SUNRISE:{'Buffer 20km':13,'Buffer 10km':26,'Village Level':1},YORGO:{'Buffer 20km':9,'Village Level':16},
+      FGV:{'Buffer 20km':54},'HOK HUAT':{'Buffer 20km':34},JINLEE:{'Buffer 20km':80},SEHCOM:{'Buffer 20km':21},
+      BNS:{'Belum':6,'Village Level':21,'Village+B10':3,'Buffer 20km':3}};
+    SC.forEach(s=>{add(s.p);const m=PT[s.p]||{};Object.entries(m).forEach(([b,v])=>{add(b);links.push({source:s.p,target:b,value:v});});});
+  }
+  return{
+    tooltip:{...baseTip,trigger:'item',formatter:p=>p.dataType==='edge'?`${p.data.source} → ${p.data.target}<br><b>${p.data.value}</b> mill`:`<b>${p.name}</b>`},
+    series:[{type:'sankey',left:18,right:140,top:14,bottom:14,
+      nodeWidth:14,nodeGap:9,draggable:false,
+      label:{color:C.ink,fontFamily:'IBM Plex Sans',fontSize:12.5},
+      lineStyle:{color:'gradient',opacity:.34,curveness:.5},
+      emphasis:{focus:'adjacency',lineStyle:{opacity:.6}},
+      itemStyle:{borderWidth:0},data:nodes,links:links}]
+  };
+}
+document.getElementById('sankeyToggle').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  [...e.currentTarget.children].forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  if(sankeyChart)sankeyChart.setOption(sankeyOpt(b.dataset.m),true);
+});
+
+/* --- 6 TRACT --- */
+function b6(){
+  mk('gaugeMD',gauge(354/621*100,C.green));
+  mk('gaugeGJ',gauge(125/621*100,C.teal));
+  const d=[...TRACT].sort((a,b)=>a.t-b.t);
+  mk('cTract',{
+    grid:{left:90,right:24,top:10,bottom:18},
+    tooltip:{...baseTip,trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>v+' mill'},
+    xAxis:{type:'value',...axisCommon},
+    yAxis:{type:'category',data:d.map(x=>x.p),...axisCommon,axisLabel:{...axisCommon.axisLabel,fontSize:11.5}},
+    series:[
+      {name:'Total',type:'bar',data:d.map(x=>x.t),barGap:'-100%',barWidth:'66%',
+        itemStyle:{color:'rgba(110,124,118,.22)',borderRadius:[0,4,4,0]},z:1,silent:true},
+      {name:'Master',type:'bar',data:d.map(x=>x.md),barGap:'-100%',barWidth:'66%',
+        itemStyle:{color:C.green,borderRadius:[0,4,4,0]},z:2},
+      {name:'Geojson',type:'bar',data:d.map(x=>x.gj),barWidth:'34%',
+        itemStyle:{color:C.teal,borderRadius:[0,3,3,0]},z:3}]
+  });
+}
+function gauge(p,c){return{
+  series:[{type:'gauge',startAngle:210,endAngle:-30,radius:'100%',center:['50%','58%'],
+    progress:{show:true,width:9,itemStyle:{color:c}},
+    axisLine:{lineStyle:{width:9,color:[[1,'rgba(180,205,192,.12)']]}},
+    pointer:{show:false},axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
+    anchor:{show:false},title:{show:false},
+    detail:{valueAnimation:true,offsetCenter:[0,0],fontFamily:'Space Grotesk',fontSize:24,fontWeight:600,
+      color:C.ink,formatter:v=>Math.round(v)+'%'},
+    data:[{value:p}]}]
+};}
+
+/* --- 7 MILL --- */
+function b7(){
+  document.getElementById('millBody').innerHTML=MILL.map(m=>{
+    const tot=m.yes+m.no||1;const w=Math.round(m.yes/(m.y25||1)*54);
+    return `<tr><td>${m.s}</td><td class="mono">${m.y24||'–'}</td><td class="mono">${m.y25}</td>
+      <td class="mono" style="color:${C.green}">${m.yes}<span class="cell-bar" style="width:${w}px;background:${C.green}"></span></td>
+      <td class="mono" style="color:${m.no?C.orange:C.faint}">${m.no}</td></tr>`;
+  }).join('');
+  mk('cMill',{
+    grid:{left:60,right:20,top:30,bottom:24},
+    legend:{data:['2024','2025'],top:0,textStyle:{color:C.muted,fontSize:12},itemWidth:11,itemHeight:11},
+    tooltip:{...baseTip,trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>v+' mill'},
+    xAxis:{type:'category',data:MILL.map(m=>m.s),...axisCommon},
+    yAxis:{type:'value',...axisCommon},
+    series:[
+      {name:'2024',type:'bar',data:MILL.map(m=>m.y24),barWidth:'30%',itemStyle:{color:C.slate,borderRadius:[4,4,0,0]}},
+      {name:'2025',type:'bar',data:MILL.map(m=>m.y25),barWidth:'30%',itemStyle:{color:C.gold,borderRadius:[4,4,0,0]},
+        label:{show:true,position:'top',color:C.muted,fontFamily:'IBM Plex Mono',fontSize:10}}]
+  });
+}
+
+/* --- 9 RINGS --- */
+function b9(){
+  mk('rPlot',ring(403/621*100,C.green));
+  mk('rMaster',ring(354/621*100,C.teal));
+  mk('rGeo',ring(125/621*100,C.gold));
+}
+function ring(p,c){return{
+  series:[{type:'pie',radius:['70%','90%'],center:['50%','50%'],silent:true,
+    label:{show:false},data:[
+      {value:p,itemStyle:{color:c,borderRadius:6}},
+      {value:100-p,itemStyle:{color:'rgba(180,205,192,.10)'}}]}],
+  graphic:[{type:'text',left:'center',top:'42%',
+    style:{text:Math.round(p)+'%',fill:C.ink,fontFamily:'Space Grotesk',fontSize:30,fontWeight:600,textAlign:'center'}}]
+};}
+
+/* ===================== TIMELINE SIM ===================== */
+const MS=864e5;
+const D=(y,m,d)=>new Date(y,m-1,d);
+const fmtMon=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const fmt=d=>d.getDate()+' '+fmtMon[d.getMonth()];
+const isWend=d=>{const g=d.getDay();return g===0||g===6;};
+function addBiz(d,n){let c=new Date(d),a=0;while(a<n){c=new Date(c.getTime()+MS);if(!isWend(c))a++;}return c;}
+function nextBiz(d){let c=new Date(d);while(isWend(c))c=new Date(c.getTime()+MS);return c;}
+function bizBetween(a,b){let c=new Date(a),n=0;while(c<b){c=new Date(c.getTime()+MS);if(!isWend(c))n++;}return n;}
+const START=D(2026,6,30), DL_A=D(2026,8,7), DL_B=D(2026,8,14);
+
+function simulate(streams,allDone,dAF,dRep,dUp){
+  const onP=SC.filter(s=>s.pr>0);
+  const sorted=[...onP].sort((a,b)=>a.pr-b.pr);
+  const span=Math.max(1,bizBetween(START,allDone));
+  const dig={};SC.forEach(s=>dig[s.p]=s.pr>0?null:START);
+  sorted.forEach((s,i)=>{const frac=sorted.length<=1?1:(i+1)/sorted.length;dig[s.p]=addBiz(START,Math.round(frac*span));});
+  const free=Array(streams).fill(START);
+  const order=[...SC].sort((a,b)=>dig[a.p]-dig[b.p]||b.t-a.t);
+  const tasks=[];
+  order.forEach(s=>{
+    let si=0;for(let k=1;k<streams;k++)if(free[k]<free[si])si=k;
+    let st=nextBiz(new Date(Math.max(free[si],dig[s.p])));
+    const afS=st,afE=addBiz(afS,dAF),repE=addBiz(afE,dRep),upE=addBiz(repE,dUp);
+    free[si]=upE;
+    tasks.push({p:s.p,hasDig:s.pr>0,dig:dig[s.p],afS,afE,repS:afE,repE,upS:repE,upE});
+  });
+  const finish=tasks.reduce((m,t)=>t.upE>m?t.upE:m,START);
+  return{tasks,finish};
+}
+function renderGantt(){
+  const streams=+iStreams.value, dAF=+iAF.value, dRep=+iRep.value, dUp=+iUp.value;
+  const allDone=nextBiz(addBiz(START,+iAll.value));
+  vStreams.textContent=streams;vAll.textContent=fmt(allDone);
+  const {tasks,finish}=simulate(streams,allDone,dAF,dRep,dUp);
+  const T0=START.getTime(), T1=Math.max(finish.getTime(),DL_B.getTime())+3*MS;
+  const span=T1-T0, x=t=>((t-T0)/span*100);
+  tasks.sort((a,b)=>a.afS-b.afS);
+  let h='';
+  // axis ticks weekly Mondays
+  let tick='';let c=new Date(START);while(c.getTime()<=T1){if(c.getDay()===1)tick+=`<div class="g-tick" style="left:${x(c.getTime())}%">${fmt(c)}</div>`;c=new Date(c.getTime()+MS);}
+  h+=`<div class="g-axis">${tick}</div>`;
+  // deadline band + today as overlay rows via wrapper
+  const bandL=x(DL_A.getTime()),bandW=x(DL_B.getTime())-bandL,todayX=x(D(2026,6,24).getTime());
+  h+=`<div style="position:relative">`;
+  tasks.forEach(t=>{
+    let segs='';
+    if(t.hasDig)segs+=`<div class="g-seg dig" title="Digitizing → selesai ${fmt(t.dig)}" style="left:0;width:${x(t.dig.getTime())}%">digitizing</div>`;
+    segs+=`<div class="g-seg" title="${t.p} · Analysis+Filter\n${fmt(t.afS)} → ${fmt(t.afE)}" style="left:${x(t.afS.getTime())}%;width:${Math.max(.8,x(t.afE.getTime())-x(t.afS.getTime()))}%;background:${C.green}">A+F</div>`;
+    segs+=`<div class="g-seg" title="${t.p} · Report\n${fmt(t.repS)} → ${fmt(t.repE)}" style="left:${x(t.repS.getTime())}%;width:${Math.max(.8,x(t.repE.getTime())-x(t.repS.getTime()))}%;background:${C.gold}">Report</div>`;
+    segs+=`<div class="g-seg" title="${t.p} · Upload TRACT\n${fmt(t.upS)} → ${fmt(t.upE)}" style="left:${x(t.upS.getTime())}%;width:${Math.max(.8,x(t.upE.getTime())-x(t.upS.getTime()))}%;background:${C.teal}">Upload</div>`;
+    h+=`<div class="g-row"><div class="g-label" title="${t.p}">${t.p}</div><div class="g-track">${segs}</div></div>`;
+  });
+  // band overlay spanning all rows
+  h+=`<div class="g-band" style="left:calc(104px + (100% - 104px)*${bandL/100});width:calc((100% - 104px)*${bandW/100})"><span class="bl">target 7–14 Agu</span></div>`;
+  h+=`<div class="g-today" style="left:calc(104px + (100% - 104px)*${todayX/100})"></div>`;
+  h+=`</div>`;
+  ganttInner.innerHTML=h;
+  // verdict
+  const slack=bizBetween(finish,DL_B);
+  const late=finish>DL_B;
+  const v=document.getElementById('verdict');
+  v.className='verdict '+(late?'late':'ok');
+  document.getElementById('vdDate').textContent=fmt(finish)+' 2026';
+  document.getElementById('vdSlack').textContent=late
+    ? `Melewati tenggat 14 Agu sebesar ${bizBetween(DL_B,finish)} hari kerja — kurangi beban / tambah stream.`
+    : (finish<=DL_A
+        ? `Selesai ${bizBetween(finish,DL_A)} hari kerja sebelum awal jendela (7 Agu). Aman.`
+        : `Masuk dalam jendela target 7–14 Agu, sisa ${slack} hari kerja sebelum 14 Agu.`);
+}
+let b8done=false;
+function b8(){
+  ['iStreams','iAll','iAF','iRep','iUp'].forEach(id=>document.getElementById(id).addEventListener('input',renderGantt));
+  renderGantt();b8done=true;
+}
+
+/* ===================== COVER ART ===================== */
+function coverArt(){
+  const cv=document.getElementById('coverCanvas');if(!cv)return;
+  const wrap=cv.parentElement;const dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=wrap.clientWidth,h=wrap.clientHeight;cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+'px';cv.style.height=h+'px';
+  const g=cv.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,w,h);
+  // topographic-ish concentric plot boundaries (palm estate motif)
+  g.lineWidth=1;
+  for(let r=0;r<11;r++){
+    g.beginPath();const cx=w*.62,cy=h*.46,rad=18+r*Math.min(w,h)*.045;
+    g.strokeStyle=`rgba(240,194,74,${.05+r*.012})`;
+    for(let a=0;a<=Math.PI*2+.01;a+=.18){
+      const jit=Math.sin(a*3+r)*6+Math.cos(a*5-r)*4;
+      const xx=cx+Math.cos(a)*(rad+jit),yy=cy+Math.sin(a)*(rad+jit)*.9;
+      a===0?g.moveTo(xx,yy):g.lineTo(xx,yy);
+    }g.stroke();
+  }
+  // scattered plot dots
+  for(let i=0;i<60;i++){
+    const px=Math.random()*w,py=Math.random()*h;
+    g.fillStyle=`rgba(79,190,142,${Math.random()*.5})`;
+    g.fillRect(px,py,2,2);
+  }
+}
+window.addEventListener('resize',()=>{if(cur===0)coverArt();});
+
+/* ===================== INIT ===================== */
+go(0);coverArt();
+</script>
+</body>
+</html>
